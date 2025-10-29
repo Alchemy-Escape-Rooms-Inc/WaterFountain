@@ -3,13 +3,19 @@
 
 Adafruit_PWMServoDriver pwm = Adafruit_PWMServoDriver(0x40);
 
-void setup(){
+void calibrate() {
+  //increase or decrease pulseLength manually 
+  pwm.setPWM(0, 0, 570);
+}
+
+void setup() {
   Serial.begin(9600);
   pwm.begin();
-  pwm.setPWMFreq(1000);
+  pwm.setPWMFreq(50);
+  randomSeed(A3);
 }
 
-void loop(){
-  //pwm.setPWM(0,1024,3072);
+void loop() {
+  calibrate();
+  delay(1000);
 }
-
