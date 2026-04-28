@@ -44,10 +44,10 @@ const int   MQTT_PORT     = 1883;
 #define MQTT_TOPIC_POT3         "MermaidsTale/WaterFountain/Pot3"
 #define MQTT_TOPIC_POTS_FILLED  "MermaidsTale/WaterFountain/PotsFilled"
 
-// ── Pins (ESP32-S3, non-strapping; confirm before flashing) ────────────────
-const int PIN_POT1 = 4;
-const int PIN_POT2 = 5;
-const int PIN_POT3 = 6;
+// ── Pins (regular ESP32, non-strapping with working pullups) ───────────────
+const int PIN_POT1 = 16;
+const int PIN_POT2 = 17;
+const int PIN_POT3 = 18;
 
 // ── Timing ─────────────────────────────────────────────────────────────────
 const unsigned long DEBOUNCE_MS             = 50;
