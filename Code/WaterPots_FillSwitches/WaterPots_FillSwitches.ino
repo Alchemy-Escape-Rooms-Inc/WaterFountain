@@ -5,8 +5,8 @@
  * Compliant with WatchTower Coding Standards v2025-12-21
  * ============================================
  *
- * Each switch closes to GND when its pot is filled.
- * Wired with INPUT_PULLUP — LOW = filled, HIGH = empty.
+ * Each switch closes to GND when its pot is empty.
+ * Wired with INPUT_PULLUP — LOW = empty, HIGH = filled.
  *
  * MQTT TOPICS:
  *   Subscribe: MermaidsTale/WaterFountain/command
@@ -44,10 +44,10 @@ const int   MQTT_PORT     = 1883;
 #define MQTT_TOPIC_POT3         "MermaidsTale/WaterFountain/Pot3"
 #define MQTT_TOPIC_POTS_FILLED  "MermaidsTale/WaterFountain/PotsFilled"
 
-// ── Pins (regular ESP32, non-strapping with working pullups) ───────────────
-const int PIN_POT1 = 16;
-const int PIN_POT2 = 17;
-const int PIN_POT3 = 18;
+// ── Pins (ESP32-S3, non-strapping with working pullups) ────────────────────
+const int PIN_POT1 = 4;
+const int PIN_POT2 = 5;
+const int PIN_POT3 = 6;
 
 // ── Timing ─────────────────────────────────────────────────────────────────
 const unsigned long DEBOUNCE_MS             = 50;
@@ -61,7 +61,7 @@ struct Pot {
   int pin;
   const char* topic;
   const char* name;
-  bool filled;            // debounced state (true = LOW = filled)
+  bool filled;            // debounced state (true = HIGH = filled)
   bool lastRawFilled;
   unsigned long lastChangeMs;
 };
@@ -122,7 +122,7 @@ void publishPotsFilled(bool all) {
 void puzzleReset() {
   for (int i = 0; i < 3; i++) {
     Pot& p = pots[i];
-    bool rawFilled = (digitalRead(p.pin) == LOW);
+    bool rawFilled = (digitalRead(p.pin) == HIGH);
     p.filled = rawFilled;
     p.lastRawFilled = rawFilled;
     p.lastChangeMs = millis();
@@ -246,7 +246,7 @@ void readPots() {
   unsigned long now = millis();
   for (int i = 0; i < 3; i++) {
     Pot& p = pots[i];
-    bool rawFilled = (digitalRead(p.pin) == LOW);
+    bool rawFilled = (digitalRead(p.pin) == HIGH);
 
     if (rawFilled != p.lastRawFilled) {
       p.lastChangeMs = now;
@@ -292,7 +292,7 @@ void setup() {
 
   // Seed initial state so first reading publishes if already filled at boot
   for (int i = 0; i < 3; i++) {
-    pots[i].lastRawFilled = !(digitalRead(pots[i].pin) == LOW);
+    pots[i].lastRawFilled = !(digitalRead(pots[i].pin) == HIGH);
     pots[i].lastChangeMs = millis();
   }
 
