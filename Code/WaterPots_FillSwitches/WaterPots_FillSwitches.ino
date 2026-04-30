@@ -67,9 +67,9 @@ struct Pot {
 };
 
 Pot pots[3] = {
-  { PIN_POT1, MQTT_TOPIC_POT1, "Pot1", false, false, 0 },
-  { PIN_POT2, MQTT_TOPIC_POT2, "Pot2", false, false, 0 },
-  { PIN_POT3, MQTT_TOPIC_POT3, "Pot3", false, false, 0 },
+  { PIN_POT1, MQTT_TOPIC_POT1, "Waterpot 1", false, false, 0 },
+  { PIN_POT2, MQTT_TOPIC_POT2, "Waterpot 2", false, false, 0 },
+  { PIN_POT3, MQTT_TOPIC_POT3, "Waterpot 3", false, false, 0 },
 };
 
 bool allPotsFilledLast = false;
@@ -90,9 +90,21 @@ void mqttLogf(const char* format, ...) {
 }
 
 // ── Per-pot publish ────────────────────────────────────────────────────────
+// Asymmetric payload per spec:
+//   filled -> "Waterpot N= filled"   (carries pot identity)
+//   empty  -> "empty"                (bare word, identity comes from topic)
+static void formatPotPayload(const Pot& p, char* buf, size_t len) {
+  if (p.filled) {
+    snprintf(buf, len, "%s= filled", p.name);
+  } else {
+    snprintf(buf, len, "empty");
+  }
+}
+
 void publishPot(const Pot& p) {
-  const char* payload = p.filled ? "filled" : "empty";
-  mqttLogf("[POT] %s=%s", p.name, payload);
+  char payload[32];
+  formatPotPayload(p, payload, sizeof(payload));
+  mqttLogf("[POT] %s = %s", p.name, p.filled ? "filled" : "empty");
   if (mqttClient.connected()) {
     mqttClient.publish(p.topic, payload, true);   // retained
   }
@@ -219,7 +231,9 @@ void mqtt_reconnect() {
     mqttLogf("%s v%s online", PROP_NAME, VERSION);
     // Republish current pot state on reconnect
     for (int i = 0; i < 3; i++) {
-      mqttClient.publish(pots[i].topic, pots[i].filled ? "filled" : "empty", true);
+      char payload[32];
+      formatPotPayload(pots[i], payload, sizeof(payload));
+      mqttClient.publish(pots[i].topic, payload, true);
     }
     mqttClient.publish(MQTT_TOPIC_POTS_FILLED, allPotsFilledLast ? "true" : "false", true);
   } else {
