@@ -1,0 +1,44 @@
+=== Water Fountain — Session Log ===
+
+--- 2026-04-30 ---
+Files reviewed/modified:
+  - Code/WaterPots_FillSwitches/WaterPots_FillSwitches.ino
+
+Changes:
+  - Pulled origin/main: picked up commit 3ee8fcb "WaterPots: asymmetric pot
+    payload format (Waterpot N= filled / empty)". Local pin edits stashed
+    and reapplied cleanly (no conflict).
+  - Reversed switch-sense logic per request: ground = empty, high = filled.
+    The pot is still read with INPUT_PULLUP, but now `rawFilled` is true on
+    HIGH instead of LOW. Three call sites flipped:
+      * readPots()       line 249  LOW -> HIGH
+      * puzzleReset()    line 125  LOW -> HIGH
+      * setup() seed     line 295  LOW -> HIGH
+    Header comment + Pot.filled comment updated to match.
+  - Local pin edits already in tree (PIN_POT1=4, PIN_POT2=5, PIN_POT3=6 for
+    ESP32-S3) preserved through the pull.
+
+Notes:
+  - Switches must be wired so that an empty pot closes to GND (pulls the
+    pin LOW) and a filled pot leaves the pin floating (pulled HIGH by the
+    INPUT_PULLUP). If the wiring is the other way around, this change will
+    invert the readings — flip back if needed.
+  - MQTT contract is unchanged: filled publishes "Waterpot N= filled",
+    empty publishes "empty", PotsFilled stays true/false.
+
+Next steps:
+  - Bench-test with a known-empty pot to confirm "empty" is published when
+    the switch is grounded, and "Waterpot N= filled" is published when the
+    switch is open.
+
+Deploy (2026-04-30):
+  - WatchTower audit: PASS on all 8 protocol checks. Found stale polarity
+    comments in MANIFEST.h ("active LOW = filled") — corrected to
+    "active HIGH = filled" before committing so the 6 AM Grimoire parser
+    publishes correct wiring docs.
+  - Commit 5da9bc7 pushed to origin/main:
+      "WaterPots: invert fill-switch polarity + retarget to ESP32-S3"
+      (also stages MANIFEST.h as a new tracked file).
+  - Compile (esp32:esp32:esp32s3): PASS — 875400 bytes (66% flash),
+    45420 bytes (13% RAM).
+  - Flash to COM3: PASS — full write, hash verified, hard reset clean.
