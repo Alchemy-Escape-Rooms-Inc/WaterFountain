@@ -68,7 +68,7 @@ namespace manifest {
 
 // ── Device Identity ─────────────────────────────────────────────────────────
 inline constexpr const char* DEVICE_NAME      = "WaterFountain";   // @DEVICE_NAME      (MQTT client ID + topic base)
-inline constexpr const char* FIRMWARE_VERSION = "1.1.0";           // @FIRMWARE_VERSION
+inline constexpr const char* FIRMWARE_VERSION = "1.2.0";           // @FIRMWARE_VERSION
 
 
 // ============================================================================
@@ -111,6 +111,9 @@ inline constexpr unsigned long HEARTBEAT_INTERVAL = 300000;         // @HEARTBEA
 //  @COMMAND:  RESET         | Reboots ESP32                                    | Also accepts REBOOT, RESTART
 //  @COMMAND:  PUZZLE_RESET  | Re-reads all 3 fill switches, republishes state  | No reboot
 //  @COMMAND:  LIGHTS_TEST   | Strip R/G/B sweep, then back to pot colors       | v1.1.0
+//  @COMMAND:  LIGHTS_BLUE   | Whole strip solid blue (overrides pot colors)    | v1.2.0, reboot = AUTO
+//  @COMMAND:  LIGHTS_OFF    | Whole strip dark                                 | v1.2.0
+//  @COMMAND:  LIGHTS_AUTO   | Back to per-pot colors (blue empty/orange full)  | v1.2.0
 //
 //  STATUS MESSAGES (published on /status topic):
 //  @STATUS_MSG:  ONLINE          | Sent on boot and MQTT reconnect

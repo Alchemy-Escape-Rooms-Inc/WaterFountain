@@ -23,6 +23,7 @@
  * in strip order Pot1, Pot2, Pot3: BLUE = empty, ORANGE = filled.
  * Also adds mandatory ArduinoOTA (hostname WaterFountain, port 3232,
  * password = Wi-Fi) - after this USB flash every update is wireless.
+ * v1.2.0: LIGHTS_BLUE (whole strip blue), LIGHTS_OFF, LIGHTS_AUTO (pot colors).
  * ============================================
  */
 
@@ -33,7 +34,7 @@
 #include <ArduinoOTA.h>
 #include <FastLED.h>
 
-#define VERSION    "1.1.0"
+#define VERSION    "1.2.0"
 #define GAME_NAME  "MermaidsTale"
 #define PROP_NAME  "WaterFountain"
 
@@ -68,6 +69,10 @@ CRGB leds[LED_COUNT];
 static const CRGB COLOR_EMPTY  = CRGB(0, 0, 255);     // blue
 static const CRGB COLOR_FILLED = CRGB(255, 90, 0);    // orange
 bool lightsDirty = true;
+// v1.2.0: lights mode. AUTO = per-pot colors; BLUE = whole strip blue; OFF = dark.
+// Set by LIGHTS_AUTO / LIGHTS_BLUE / LIGHTS_OFF. Reboot returns to AUTO.
+enum LightsMode { LIGHTS_MODE_AUTO, LIGHTS_MODE_BLUE, LIGHTS_MODE_OFF };
+LightsMode lightsMode = LIGHTS_MODE_AUTO;
 
 // ── Timing ─────────────────────────────────────────────────────────────────
 const unsigned long DEBOUNCE_MS             = 50;
@@ -95,6 +100,14 @@ Pot pots[3] = {
 bool allPotsFilledLast = false;
 
 void renderLights() {
+  if (lightsMode == LIGHTS_MODE_BLUE) {
+    fill_solid(leds, LED_COUNT, COLOR_EMPTY);
+    FastLED.show(); lightsDirty = false; return;
+  }
+  if (lightsMode == LIGHTS_MODE_OFF) {
+    fill_solid(leds, LED_COUNT, CRGB::Black);
+    FastLED.show(); lightsDirty = false; return;
+  }
   for (int i = 0; i < 3; i++) {
     CRGB c = pots[i].filled ? COLOR_FILLED : COLOR_EMPTY;
     for (int k = 0; k < LEDS_PER_POT; k++) leds[i * LEDS_PER_POT + k] = c;
@@ -242,6 +255,15 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   if (strcmp(msg, "LIGHTS_TEST") == 0) {
     mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
     lightsSelfTest();
+    return;
+  }
+
+  // LIGHTS_BLUE / LIGHTS_OFF / LIGHTS_AUTO -> lights mode override (v1.2.0)
+  if (strcmp(msg, "LIGHTS_BLUE") == 0 || strcmp(msg, "LIGHTS_OFF") == 0 || strcmp(msg, "LIGHTS_AUTO") == 0) {
+    lightsMode = (msg[7] == 'B') ? LIGHTS_MODE_BLUE : (msg[7] == 'O') ? LIGHTS_MODE_OFF : LIGHTS_MODE_AUTO;
+    lightsDirty = true;
+    mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
+    mqttLogf("[LIGHTS] mode -> %s", msg + 7);
     return;
   }
 
