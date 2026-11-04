@@ -24,6 +24,10 @@
  * Also adds mandatory ArduinoOTA (hostname WaterFountain, port 3232,
  * password = Wi-Fi) - after this USB flash every update is wireless.
  * v1.2.0: LIGHTS_BLUE (whole strip blue), LIGHTS_OFF, LIGHTS_AUTO (pot colors).
+ * v1.3.0: S3 no longer drives the strip (3.3 V data too weak). GPIO39 is now
+ * a 9600-baud UART TX to an Arduino Nano (Code/WaterFountain_LightsNano) that
+ * paints the strip at 5 V. Frame: F,perPot,bri,r1,g1,b1,r2,g2,b2,r3,g3,b3,sum
+ * resent every 500 ms. All color logic stays here (OTA); the Nano is dumb.
  * ============================================
  */
 
@@ -32,9 +36,11 @@
 #include <PubSubClient.h>
 #include <stdarg.h>
 #include <ArduinoOTA.h>
-#include <FastLED.h>
+// Forward decls so Arduino auto-prototypes compile (v1.3.0)
+struct Pot;
+struct RGB;
 
-#define VERSION    "1.2.0"
+#define VERSION    "1.3.0"
 #define GAME_NAME  "MermaidsTale"
 #define PROP_NAME  "WaterFountain"
 
@@ -63,11 +69,29 @@ const int PIN_POT3 = 6;
 // strip from the data-in end = Pot1, Pot2, Pot3.
 #define LED_DATA_PIN    39
 #define LEDS_PER_POT    10
-#define LED_COUNT       (LEDS_PER_POT * 3)
 #define LED_BRIGHTNESS  180          // 0-255
-CRGB leds[LED_COUNT];
-static const CRGB COLOR_EMPTY  = CRGB(0, 0, 255);     // blue
-static const CRGB COLOR_FILLED = CRGB(255, 90, 0);    // orange
+struct RGB { uint8_t r, g, b; };
+static const RGB COLOR_EMPTY  = { 0, 0, 255 };     // blue
+static const RGB COLOR_FILLED = { 255, 90, 0 };    // orange
+static const RGB COLOR_BLACK  = { 0, 0, 0 };
+#define LIGHTS_BAUD           9600
+#define LIGHTS_RESEND_MS      500
+RGB potColor[3] = { COLOR_EMPTY, COLOR_EMPTY, COLOR_EMPTY };
+unsigned long lastLightsSend = 0;
+
+// Send one frame to the Nano (see header for format).
+void sendLightsFrame() {
+  int v[11] = { LEDS_PER_POT, LED_BRIGHTNESS,
+                potColor[0].r, potColor[0].g, potColor[0].b,
+                potColor[1].r, potColor[1].g, potColor[1].b,
+                potColor[2].r, potColor[2].g, potColor[2].b };
+  int sum = 0;
+  for (int i = 0; i < 11; i++) sum += v[i];
+  Serial1.printf("F,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
+                 v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], sum & 0xFF);
+  lastLightsSend = millis();
+}
+void setAllColor(RGB c) { for (int i = 0; i < 3; i++) potColor[i] = c; sendLightsFrame(); }
 bool lightsDirty = true;
 // v1.2.0: lights mode. AUTO = per-pot colors; BLUE = whole strip blue; OFF = dark.
 // Set by LIGHTS_AUTO / LIGHTS_BLUE / LIGHTS_OFF. Reboot returns to AUTO.
@@ -100,29 +124,21 @@ Pot pots[3] = {
 bool allPotsFilledLast = false;
 
 void renderLights() {
-  if (lightsMode == LIGHTS_MODE_BLUE) {
-    fill_solid(leds, LED_COUNT, COLOR_EMPTY);
-    FastLED.show(); lightsDirty = false; return;
-  }
-  if (lightsMode == LIGHTS_MODE_OFF) {
-    fill_solid(leds, LED_COUNT, CRGB::Black);
-    FastLED.show(); lightsDirty = false; return;
-  }
   for (int i = 0; i < 3; i++) {
-    CRGB c = pots[i].filled ? COLOR_FILLED : COLOR_EMPTY;
-    for (int k = 0; k < LEDS_PER_POT; k++) leds[i * LEDS_PER_POT + k] = c;
+    if (lightsMode == LIGHTS_MODE_BLUE)     potColor[i] = COLOR_EMPTY;
+    else if (lightsMode == LIGHTS_MODE_OFF) potColor[i] = COLOR_BLACK;
+    else potColor[i] = pots[i].filled ? COLOR_FILLED : COLOR_EMPTY;
   }
-  FastLED.show();
+  sendLightsFrame();
   lightsDirty = false;
 }
 
 // Boot + LIGHTS_TEST: whole strip RED, GREEN, BLUE (proves wiring + color order).
 void lightsSelfTest() {
-  const CRGB seq[3] = { CRGB(255, 0, 0), CRGB(0, 255, 0), CRGB(0, 0, 255) };
+  const RGB seq[3] = { {255, 0, 0}, {0, 255, 0}, {0, 0, 255} };
   for (int k = 0; k < 3; k++) {
-    fill_solid(leds, LED_COUNT, seq[k]);
-    FastLED.show();
-    delay(300);
+    setAllColor(seq[k]);
+    delay(600);
   }
   lightsDirty = true;
 }
@@ -367,8 +383,7 @@ void setup() {
     pots[i].lastChangeMs = millis();
   }
 
-  FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(leds, LED_COUNT);
-  FastLED.setBrightness(LED_BRIGHTNESS);
+  Serial1.begin(LIGHTS_BAUD, SERIAL_8N1, -1, LED_DATA_PIN);   // TX only -> Nano D2
   lightsSelfTest();
 
   setup_wifi();
@@ -396,6 +411,7 @@ void loop() {
 
   readPots();
   if (lightsDirty) renderLights();
+  else if (millis() - lastLightsSend >= LIGHTS_RESEND_MS) sendLightsFrame();
   send_heartbeat();
   delay(10);
 }

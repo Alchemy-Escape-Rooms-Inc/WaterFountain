@@ -68,7 +68,7 @@ namespace manifest {
 
 // ── Device Identity ─────────────────────────────────────────────────────────
 inline constexpr const char* DEVICE_NAME      = "WaterFountain";   // @DEVICE_NAME      (MQTT client ID + topic base)
-inline constexpr const char* FIRMWARE_VERSION = "1.2.0";           // @FIRMWARE_VERSION
+inline constexpr const char* FIRMWARE_VERSION = "1.3.0";           // @FIRMWARE_VERSION
 
 
 // ============================================================================
@@ -141,7 +141,7 @@ inline constexpr int PIN_POT2 = 5;                                  // @PIN:POT2
 inline constexpr int PIN_POT3 = 6;                                  // @PIN:POT3   | Pot 3 fill switch — closes to GND when EMPTY (HIGH = filled)
 
 // -- Lights (v1.1.0, owner 2026-11-04) --
-inline constexpr int PIN_LED_DATA = 39;                             // @PIN:LED_DATA | WS2812B data, 5V from fountain supply, common GND. Sections Pot1/Pot2/Pot3: BLUE empty, ORANGE filled. LEDS_PER_POT in the .ino
+inline constexpr int PIN_LED_DATA = 39;                             // @PIN:LED_DATA | v1.3.0: UART TX 9600 -> Arduino Nano D2 (Nano drives WS2812B on D6 at 5V). Frame F,perPot,bri,9xRGB,sum every 500ms. Sections Pot1/2/3 BLUE empty, ORANGE filled
 
 // @END:PINS
 
