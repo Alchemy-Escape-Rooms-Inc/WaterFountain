@@ -68,7 +68,7 @@ namespace manifest {
 
 // ── Device Identity ─────────────────────────────────────────────────────────
 inline constexpr const char* DEVICE_NAME      = "WaterFountain";   // @DEVICE_NAME      (MQTT client ID + topic base)
-inline constexpr const char* FIRMWARE_VERSION = "1.0.0";           // @FIRMWARE_VERSION
+inline constexpr const char* FIRMWARE_VERSION = "1.1.0";           // @FIRMWARE_VERSION
 
 
 // ============================================================================
@@ -110,6 +110,7 @@ inline constexpr unsigned long HEARTBEAT_INTERVAL = 300000;         // @HEARTBEA
 //  @COMMAND:  STATUS        | Sends state + uptime + RSSI + per-pot detail     | Full diagnostic
 //  @COMMAND:  RESET         | Reboots ESP32                                    | Also accepts REBOOT, RESTART
 //  @COMMAND:  PUZZLE_RESET  | Re-reads all 3 fill switches, republishes state  | No reboot
+//  @COMMAND:  LIGHTS_TEST   | Strip R/G/B sweep, then back to pot colors       | v1.1.0
 //
 //  STATUS MESSAGES (published on /status topic):
 //  @STATUS_MSG:  ONLINE          | Sent on boot and MQTT reconnect
@@ -135,6 +136,9 @@ inline constexpr unsigned long HEARTBEAT_INTERVAL = 300000;         // @HEARTBEA
 inline constexpr int PIN_POT1 = 4;                                  // @PIN:POT1   | Pot 1 fill switch — closes to GND when EMPTY (HIGH = filled)
 inline constexpr int PIN_POT2 = 5;                                  // @PIN:POT2   | Pot 2 fill switch — closes to GND when EMPTY (HIGH = filled)
 inline constexpr int PIN_POT3 = 6;                                  // @PIN:POT3   | Pot 3 fill switch — closes to GND when EMPTY (HIGH = filled)
+
+// -- Lights (v1.1.0, owner 2026-11-04) --
+inline constexpr int PIN_LED_DATA = 39;                             // @PIN:LED_DATA | WS2812B data, 5V from fountain supply, common GND. Sections Pot1/Pot2/Pot3: BLUE empty, ORANGE filled. LEDS_PER_POT in the .ino
 
 // @END:PINS
 

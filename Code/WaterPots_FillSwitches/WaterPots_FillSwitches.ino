@@ -17,6 +17,12 @@
  *   Publish:   MermaidsTale/WaterFountain/Pot2      (filled / empty, retained)
  *   Publish:   MermaidsTale/WaterFountain/Pot3      (filled / empty, retained)
  *   Publish:   MermaidsTale/WaterFountain/PotsFilled (true / false, retained)
+ *
+ * v1.1.0 (owner 2026-11-04): WS2812B strip on GPIO39 (5V from the fountain
+ * supply, common ground). Strip is split into three sections, one per pot,
+ * in strip order Pot1, Pot2, Pot3: BLUE = empty, ORANGE = filled.
+ * Also adds mandatory ArduinoOTA (hostname WaterFountain, port 3232,
+ * password = Wi-Fi) - after this USB flash every update is wireless.
  * ============================================
  */
 
@@ -24,8 +30,10 @@
 #include <WiFi.h>
 #include <PubSubClient.h>
 #include <stdarg.h>
+#include <ArduinoOTA.h>
+#include <FastLED.h>
 
-#define VERSION    "1.0.0"
+#define VERSION    "1.1.0"
 #define GAME_NAME  "MermaidsTale"
 #define PROP_NAME  "WaterFountain"
 
@@ -48,6 +56,18 @@ const int   MQTT_PORT     = 1883;
 const int PIN_POT1 = 4;
 const int PIN_POT2 = 5;
 const int PIN_POT3 = 6;
+
+// -- Lights (WS2812B) --------------------------------------------------------
+// EDIT LEDS_PER_POT to match the strip: total LEDs / 3. Order along the
+// strip from the data-in end = Pot1, Pot2, Pot3.
+#define LED_DATA_PIN    39
+#define LEDS_PER_POT    10
+#define LED_COUNT       (LEDS_PER_POT * 3)
+#define LED_BRIGHTNESS  180          // 0-255
+CRGB leds[LED_COUNT];
+static const CRGB COLOR_EMPTY  = CRGB(0, 0, 255);     // blue
+static const CRGB COLOR_FILLED = CRGB(255, 90, 0);    // orange
+bool lightsDirty = true;
 
 // ── Timing ─────────────────────────────────────────────────────────────────
 const unsigned long DEBOUNCE_MS             = 50;
@@ -73,6 +93,26 @@ Pot pots[3] = {
 };
 
 bool allPotsFilledLast = false;
+
+void renderLights() {
+  for (int i = 0; i < 3; i++) {
+    CRGB c = pots[i].filled ? COLOR_FILLED : COLOR_EMPTY;
+    for (int k = 0; k < LEDS_PER_POT; k++) leds[i * LEDS_PER_POT + k] = c;
+  }
+  FastLED.show();
+  lightsDirty = false;
+}
+
+// Boot + LIGHTS_TEST: whole strip RED, GREEN, BLUE (proves wiring + color order).
+void lightsSelfTest() {
+  const CRGB seq[3] = { CRGB(255, 0, 0), CRGB(0, 255, 0), CRGB(0, 0, 255) };
+  for (int k = 0; k < 3; k++) {
+    fill_solid(leds, LED_COUNT, seq[k]);
+    FastLED.show();
+    delay(300);
+  }
+  lightsDirty = true;
+}
 unsigned long lastHeartbeat = 0;
 unsigned long lastMqttReconnect = 0;
 
@@ -102,6 +142,7 @@ static void formatPotPayload(const Pot& p, char* buf, size_t len) {
 }
 
 void publishPot(const Pot& p) {
+  lightsDirty = true;
   char payload[32];
   formatPotPayload(p, payload, sizeof(payload));
   mqttLogf("[POT] %s = %s", p.name, p.filled ? "filled" : "empty");
@@ -170,8 +211,8 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     char buf[192];
     const char* state = allPotsFilledLast ? "ALL_FILLED" : "WAITING";
     snprintf(buf, sizeof(buf),
-             "STATUS:%s:UP%lus:RSSI%d:v%s:Pot1=%s:Pot2=%s:Pot3=%s",
-             state, millis() / 1000, WiFi.RSSI(), VERSION,
+             "STATUS:%s:UP%lus:RSSI%d:v%s:IP:%s:OTA:3232:Pot1=%s:Pot2=%s:Pot3=%s",
+             state, millis() / 1000, WiFi.RSSI(), VERSION, WiFi.localIP().toString().c_str(),
              pots[0].filled ? "filled" : "empty",
              pots[1].filled ? "filled" : "empty",
              pots[2].filled ? "filled" : "empty");
@@ -194,6 +235,13 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     puzzleReset();
     mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
     Serial.println("[MQTT] PUZZLE_RESET -> OK");
+    return;
+  }
+
+  // LIGHTS_TEST -> R/G/B sweep, then back to pot colors
+  if (strcmp(msg, "LIGHTS_TEST") == 0) {
+    mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
+    lightsSelfTest();
     return;
   }
 
@@ -228,7 +276,8 @@ void mqtt_reconnect() {
     Serial.println(" connected");
     mqttClient.subscribe(MQTT_TOPIC_COMMAND);
     mqttClient.publish(MQTT_TOPIC_STATUS, "ONLINE");
-    mqttLogf("%s v%s online", PROP_NAME, VERSION);
+    mqttLogf("%s v%s online at IP %s (OTA :3232)", PROP_NAME, VERSION,
+             WiFi.localIP().toString().c_str());
     // Republish current pot state on reconnect
     for (int i = 0; i < 3; i++) {
       char payload[32];
@@ -296,7 +345,18 @@ void setup() {
     pots[i].lastChangeMs = millis();
   }
 
+  FastLED.addLeds<WS2812B, LED_DATA_PIN, GRB>(leds, LED_COUNT);
+  FastLED.setBrightness(LED_BRIGHTNESS);
+  lightsSelfTest();
+
   setup_wifi();
+
+  // Mandatory OTA (fleet protocol): hostname = device, password = Wi-Fi
+  ArduinoOTA.setHostname(PROP_NAME);
+  ArduinoOTA.setPassword(WIFI_PASSWORD);
+  ArduinoOTA.onStart([]() { mqttLogf("OTA update starting - back in ~30 s"); });
+  ArduinoOTA.begin();
+
   mqttClient.setServer(MQTT_SERVER, MQTT_PORT);
   mqttClient.setCallback(mqttCallback);
   mqttClient.setBufferSize(512);
@@ -308,10 +368,12 @@ void loop() {
     delay(500);
     return;
   }
+  ArduinoOTA.handle();
   if (!mqttClient.connected()) mqtt_reconnect();
   mqttClient.loop();
 
   readPots();
+  if (lightsDirty) renderLights();
   send_heartbeat();
   delay(10);
 }
