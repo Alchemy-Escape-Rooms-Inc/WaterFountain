@@ -68,7 +68,7 @@ namespace manifest {
 
 // ── Device Identity ─────────────────────────────────────────────────────────
 inline constexpr const char* DEVICE_NAME      = "WaterFountain";   // @DEVICE_NAME      (MQTT client ID + topic base)
-inline constexpr const char* FIRMWARE_VERSION = "1.4.0";           // @FIRMWARE_VERSION
+inline constexpr const char* FIRMWARE_VERSION = "1.4.1";           // @FIRMWARE_VERSION
 
 
 // ============================================================================

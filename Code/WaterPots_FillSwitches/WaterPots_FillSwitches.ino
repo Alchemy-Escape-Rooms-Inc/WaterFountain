@@ -43,7 +43,7 @@
 struct Pot;
 struct RGB;
 
-#define VERSION    "1.4.0"
+#define VERSION    "1.4.1"
 #define GAME_NAME  "MermaidsTale"
 #define PROP_NAME  "WaterFountain"
 
@@ -72,7 +72,7 @@ const int PIN_POT3 = 6;
 // strip from the data-in end = Pot1, Pot2, Pot3.
 #define LED_DATA_PIN    39
 #define LEDS_PER_POT    10
-#define LED_BRIGHTNESS  180          // 0-255
+#define LED_BRIGHTNESS  255          // 0-255 (max; was 180)
 struct RGB { uint8_t r, g, b; };
 static const RGB COLOR_EMPTY  = { 0, 0, 255 };     // blue
 static const RGB COLOR_FILLED = { 255, 90, 0 };    // orange
