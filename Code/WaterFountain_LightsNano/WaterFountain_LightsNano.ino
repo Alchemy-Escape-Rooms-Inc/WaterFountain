@@ -23,6 +23,8 @@
  *
  * Boot: whole strip dim blue until the first valid frame arrives.
  * USB serial (115200) prints every accepted frame for debugging.
+ * Boot: 1 s RED, 1 s GREEN, 1 s BLUE self-test on the whole strip, then dim blue.
+ * v1.0.1 (2026-11-05) dummy TX D3 instead of -1; boot color self-test
  * v1.0.0 (2026-11-04)
  * ============================================
  */
@@ -30,13 +32,13 @@
 #include <SoftwareSerial.h>
 #include <FastLED.h>
 
-#define VERSION       "1.0.0"
+#define VERSION       "1.0.1"
 #define RX_PIN        2
 #define LED_PIN       6
 #define MAX_PER_POT   100          // 300 LEDs max (900 bytes RAM)
 #define MAX_LEDS      (MAX_PER_POT * 3)
 
-SoftwareSerial link(RX_PIN, -1);   // receive only
+SoftwareSerial link(RX_PIN, 3);    // receive only; D3 = dummy TX (leave unwired). -1 made the library poke a bogus pin
 CRGB leds[MAX_LEDS];
 
 char line[96];
@@ -84,6 +86,8 @@ void setup() {
   link.begin(9600);
   FastLED.addLeds<WS2812B, LED_PIN, GRB>(leds, MAX_LEDS);
   FastLED.setBrightness(60);
+  const CRGB test[3] = { CRGB::Red, CRGB::Green, CRGB::Blue };   // self-test: proves Nano->strip path with no S3
+  for (int i = 0; i < 3; i++) { fill_solid(leds, MAX_LEDS, test[i]); FastLED.show(); delay(1000); }
   fill_solid(leds, MAX_LEDS, CRGB(0, 0, 255));   // dim blue = alive, waiting for S3
   FastLED.show();
 }
