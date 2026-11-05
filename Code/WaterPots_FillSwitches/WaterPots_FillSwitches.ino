@@ -28,6 +28,9 @@
  * a 9600-baud UART TX to an Arduino Nano (Code/WaterFountain_LightsNano) that
  * paints the strip at 5 V. Frame: F,perPot,bri,r1,g1,b1,r2,g2,b2,r3,g3,b3,sum
  * resent every 500 ms. All color logic stays here (OTA); the Nano is dumb.
+ * v1.4.0: LIGHTS_CYCLE = test mode, a constant stream of changing colors
+ * (rainbow, each pot a different hue, new frame every 150 ms). Any other
+ * LIGHTS_ command (AUTO/BLUE/OFF) or a reboot ends it.
  * ============================================
  */
 
@@ -40,7 +43,7 @@
 struct Pot;
 struct RGB;
 
-#define VERSION    "1.3.0"
+#define VERSION    "1.4.0"
 #define GAME_NAME  "MermaidsTale"
 #define PROP_NAME  "WaterFountain"
 
@@ -91,11 +94,33 @@ void sendLightsFrame() {
                  v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], sum & 0xFF);
   lastLightsSend = millis();
 }
+// hue 0-255 -> full-saturation color (no FastLED on the S3 any more)
+RGB hueToRgb(uint8_t h) {
+  uint8_t region = h / 43, rem = (h - region * 43) * 6;
+  uint8_t q = 255 - rem, t = rem;
+  switch (region) {
+    case 0:  return { 255, t, 0 };
+    case 1:  return { q, 255, 0 };
+    case 2:  return { 0, 255, t };
+    case 3:  return { 0, q, 255 };
+    case 4:  return { t, 0, 255 };
+    default: return { 255, 0, q };
+  }
+}
+#define CYCLE_STEP_MS 150
+uint8_t cycleHue = 0;
+unsigned long lastCycleStep = 0;
+void cycleStep() {
+  cycleHue += 4;
+  for (int i = 0; i < 3; i++) potColor[i] = hueToRgb(cycleHue + i * 85);
+  sendLightsFrame();
+  lastCycleStep = millis();
+}
 void setAllColor(RGB c) { for (int i = 0; i < 3; i++) potColor[i] = c; sendLightsFrame(); }
 bool lightsDirty = true;
 // v1.2.0: lights mode. AUTO = per-pot colors; BLUE = whole strip blue; OFF = dark.
 // Set by LIGHTS_AUTO / LIGHTS_BLUE / LIGHTS_OFF. Reboot returns to AUTO.
-enum LightsMode { LIGHTS_MODE_AUTO, LIGHTS_MODE_BLUE, LIGHTS_MODE_OFF };
+enum LightsMode { LIGHTS_MODE_AUTO, LIGHTS_MODE_BLUE, LIGHTS_MODE_OFF, LIGHTS_MODE_CYCLE };
 LightsMode lightsMode = LIGHTS_MODE_AUTO;
 
 // ── Timing ─────────────────────────────────────────────────────────────────
@@ -275,8 +300,10 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
   }
 
   // LIGHTS_BLUE / LIGHTS_OFF / LIGHTS_AUTO -> lights mode override (v1.2.0)
-  if (strcmp(msg, "LIGHTS_BLUE") == 0 || strcmp(msg, "LIGHTS_OFF") == 0 || strcmp(msg, "LIGHTS_AUTO") == 0) {
-    lightsMode = (msg[7] == 'B') ? LIGHTS_MODE_BLUE : (msg[7] == 'O') ? LIGHTS_MODE_OFF : LIGHTS_MODE_AUTO;
+  if (strcmp(msg, "LIGHTS_BLUE") == 0 || strcmp(msg, "LIGHTS_OFF") == 0 || strcmp(msg, "LIGHTS_AUTO") == 0 ||
+      strcmp(msg, "LIGHTS_CYCLE") == 0) {
+    lightsMode = (msg[7] == 'B') ? LIGHTS_MODE_BLUE : (msg[7] == 'O') ? LIGHTS_MODE_OFF :
+                 (msg[7] == 'C') ? LIGHTS_MODE_CYCLE : LIGHTS_MODE_AUTO;
     lightsDirty = true;
     mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
     mqttLogf("[LIGHTS] mode -> %s", msg + 7);
@@ -410,7 +437,9 @@ void loop() {
   mqttClient.loop();
 
   readPots();
-  if (lightsDirty) renderLights();
+  if (lightsMode == LIGHTS_MODE_CYCLE) {
+    if (millis() - lastCycleStep >= CYCLE_STEP_MS) cycleStep();
+  } else if (lightsDirty) renderLights();
   else if (millis() - lastLightsSend >= LIGHTS_RESEND_MS) sendLightsFrame();
   send_heartbeat();
   delay(10);

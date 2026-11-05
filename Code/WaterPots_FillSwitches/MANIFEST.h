@@ -68,7 +68,7 @@ namespace manifest {
 
 // ── Device Identity ─────────────────────────────────────────────────────────
 inline constexpr const char* DEVICE_NAME      = "WaterFountain";   // @DEVICE_NAME      (MQTT client ID + topic base)
-inline constexpr const char* FIRMWARE_VERSION = "1.3.0";           // @FIRMWARE_VERSION
+inline constexpr const char* FIRMWARE_VERSION = "1.4.0";           // @FIRMWARE_VERSION
 
 
 // ============================================================================
@@ -114,6 +114,7 @@ inline constexpr unsigned long HEARTBEAT_INTERVAL = 300000;         // @HEARTBEA
 //  @COMMAND:  LIGHTS_BLUE   | Whole strip solid blue (overrides pot colors)    | v1.2.0, reboot = AUTO
 //  @COMMAND:  LIGHTS_OFF    | Whole strip dark                                 | v1.2.0
 //  @COMMAND:  LIGHTS_AUTO   | Back to per-pot colors (blue empty/orange full)  | v1.2.0
+//  @COMMAND:  LIGHTS_CYCLE  | Test: constant rainbow stream, new frame 150 ms  | v1.4.0, any LIGHTS_ cmd ends it
 //
 //  STATUS MESSAGES (published on /status topic):
 //  @STATUS_MSG:  ONLINE          | Sent on boot and MQTT reconnect
