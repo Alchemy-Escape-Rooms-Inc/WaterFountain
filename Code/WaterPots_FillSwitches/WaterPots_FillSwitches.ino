@@ -18,19 +18,11 @@
  *   Publish:   MermaidsTale/WaterFountain/Pot3      (filled / empty, retained)
  *   Publish:   MermaidsTale/WaterFountain/PotsFilled (true / false, retained)
  *
- * v1.1.0 (owner 2026-11-04): WS2812B strip on GPIO39 (5V from the fountain
- * supply, common ground). Strip is split into three sections, one per pot,
- * in strip order Pot1, Pot2, Pot3: BLUE = empty, ORANGE = filled.
- * Also adds mandatory ArduinoOTA (hostname WaterFountain, port 3232,
- * password = Wi-Fi) - after this USB flash every update is wireless.
- * v1.2.0: LIGHTS_BLUE (whole strip blue), LIGHTS_OFF, LIGHTS_AUTO (pot colors).
- * v1.3.0: S3 no longer drives the strip (3.3 V data too weak). GPIO39 is now
- * a 9600-baud UART TX to an Arduino Nano (Code/WaterFountain_LightsNano) that
- * paints the strip at 5 V. Frame: F,perPot,bri,r1,g1,b1,r2,g2,b2,r3,g3,b3,sum
- * resent every 500 ms. All color logic stays here (OTA); the Nano is dumb.
- * v1.4.0: LIGHTS_CYCLE = test mode, a constant stream of changing colors
- * (rainbow, each pot a different hue, new frame every 150 ms). Any other
- * LIGHTS_ command (AUTO/BLUE/OFF) or a reboot ends it.
+ * v1.1.0: mandatory ArduinoOTA (hostname WaterFountain, port 3232,
+ * password = Wi-Fi) - every update is wireless.
+ * v1.1.0-v1.4.1 also drove a WS2812B light strip (via an Arduino Nano).
+ * v1.5.0 (owner 2026-11-05): lights dropped for good - ALL LED / Nano
+ * code and the LIGHTS_* commands removed. Sensors + MQTT + OTA only.
  * ============================================
  */
 
@@ -39,11 +31,10 @@
 #include <PubSubClient.h>
 #include <stdarg.h>
 #include <ArduinoOTA.h>
-// Forward decls so Arduino auto-prototypes compile (v1.3.0)
+// Forward decl so Arduino auto-prototypes compile
 struct Pot;
-struct RGB;
 
-#define VERSION    "1.4.1"
+#define VERSION    "1.5.0"
 #define GAME_NAME  "MermaidsTale"
 #define PROP_NAME  "WaterFountain"
 
@@ -66,62 +57,6 @@ const int   MQTT_PORT     = 1883;
 const int PIN_POT1 = 4;
 const int PIN_POT2 = 5;
 const int PIN_POT3 = 6;
-
-// -- Lights (WS2812B) --------------------------------------------------------
-// EDIT LEDS_PER_POT to match the strip: total LEDs / 3. Order along the
-// strip from the data-in end = Pot1, Pot2, Pot3.
-#define LED_DATA_PIN    39
-#define LEDS_PER_POT    10
-#define LED_BRIGHTNESS  255          // 0-255 (max; was 180)
-struct RGB { uint8_t r, g, b; };
-static const RGB COLOR_EMPTY  = { 0, 0, 255 };     // blue
-static const RGB COLOR_FILLED = { 255, 90, 0 };    // orange
-static const RGB COLOR_BLACK  = { 0, 0, 0 };
-#define LIGHTS_BAUD           9600
-#define LIGHTS_RESEND_MS      500
-RGB potColor[3] = { COLOR_EMPTY, COLOR_EMPTY, COLOR_EMPTY };
-unsigned long lastLightsSend = 0;
-
-// Send one frame to the Nano (see header for format).
-void sendLightsFrame() {
-  int v[11] = { LEDS_PER_POT, LED_BRIGHTNESS,
-                potColor[0].r, potColor[0].g, potColor[0].b,
-                potColor[1].r, potColor[1].g, potColor[1].b,
-                potColor[2].r, potColor[2].g, potColor[2].b };
-  int sum = 0;
-  for (int i = 0; i < 11; i++) sum += v[i];
-  Serial1.printf("F,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d,%d\n",
-                 v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7], v[8], v[9], v[10], sum & 0xFF);
-  lastLightsSend = millis();
-}
-// hue 0-255 -> full-saturation color (no FastLED on the S3 any more)
-RGB hueToRgb(uint8_t h) {
-  uint8_t region = h / 43, rem = (h - region * 43) * 6;
-  uint8_t q = 255 - rem, t = rem;
-  switch (region) {
-    case 0:  return { 255, t, 0 };
-    case 1:  return { q, 255, 0 };
-    case 2:  return { 0, 255, t };
-    case 3:  return { 0, q, 255 };
-    case 4:  return { t, 0, 255 };
-    default: return { 255, 0, q };
-  }
-}
-#define CYCLE_STEP_MS 150
-uint8_t cycleHue = 0;
-unsigned long lastCycleStep = 0;
-void cycleStep() {
-  cycleHue += 4;
-  for (int i = 0; i < 3; i++) potColor[i] = hueToRgb(cycleHue + i * 85);
-  sendLightsFrame();
-  lastCycleStep = millis();
-}
-void setAllColor(RGB c) { for (int i = 0; i < 3; i++) potColor[i] = c; sendLightsFrame(); }
-bool lightsDirty = true;
-// v1.2.0: lights mode. AUTO = per-pot colors; BLUE = whole strip blue; OFF = dark.
-// Set by LIGHTS_AUTO / LIGHTS_BLUE / LIGHTS_OFF. Reboot returns to AUTO.
-enum LightsMode { LIGHTS_MODE_AUTO, LIGHTS_MODE_BLUE, LIGHTS_MODE_OFF, LIGHTS_MODE_CYCLE };
-LightsMode lightsMode = LIGHTS_MODE_AUTO;
 
 // ── Timing ─────────────────────────────────────────────────────────────────
 const unsigned long DEBOUNCE_MS             = 50;
@@ -148,25 +83,6 @@ Pot pots[3] = {
 
 bool allPotsFilledLast = false;
 
-void renderLights() {
-  for (int i = 0; i < 3; i++) {
-    if (lightsMode == LIGHTS_MODE_BLUE)     potColor[i] = COLOR_EMPTY;
-    else if (lightsMode == LIGHTS_MODE_OFF) potColor[i] = COLOR_BLACK;
-    else potColor[i] = pots[i].filled ? COLOR_FILLED : COLOR_EMPTY;
-  }
-  sendLightsFrame();
-  lightsDirty = false;
-}
-
-// Boot + LIGHTS_TEST: whole strip RED, GREEN, BLUE (proves wiring + color order).
-void lightsSelfTest() {
-  const RGB seq[3] = { {255, 0, 0}, {0, 255, 0}, {0, 0, 255} };
-  for (int k = 0; k < 3; k++) {
-    setAllColor(seq[k]);
-    delay(600);
-  }
-  lightsDirty = true;
-}
 unsigned long lastHeartbeat = 0;
 unsigned long lastMqttReconnect = 0;
 
@@ -196,7 +112,6 @@ static void formatPotPayload(const Pot& p, char* buf, size_t len) {
 }
 
 void publishPot(const Pot& p) {
-  lightsDirty = true;
   char payload[32];
   formatPotPayload(p, payload, sizeof(payload));
   mqttLogf("[POT] %s = %s", p.name, p.filled ? "filled" : "empty");
@@ -289,24 +204,6 @@ void mqttCallback(char* topic, byte* payload, unsigned int length) {
     puzzleReset();
     mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
     Serial.println("[MQTT] PUZZLE_RESET -> OK");
-    return;
-  }
-
-  // LIGHTS_TEST -> R/G/B sweep, then back to pot colors
-  if (strcmp(msg, "LIGHTS_TEST") == 0) {
-    mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
-    lightsSelfTest();
-    return;
-  }
-
-  // LIGHTS_BLUE / LIGHTS_OFF / LIGHTS_AUTO -> lights mode override (v1.2.0)
-  if (strcmp(msg, "LIGHTS_BLUE") == 0 || strcmp(msg, "LIGHTS_OFF") == 0 || strcmp(msg, "LIGHTS_AUTO") == 0 ||
-      strcmp(msg, "LIGHTS_CYCLE") == 0) {
-    lightsMode = (msg[7] == 'B') ? LIGHTS_MODE_BLUE : (msg[7] == 'O') ? LIGHTS_MODE_OFF :
-                 (msg[7] == 'C') ? LIGHTS_MODE_CYCLE : LIGHTS_MODE_AUTO;
-    lightsDirty = true;
-    mqttClient.publish(MQTT_TOPIC_COMMAND, "OK");
-    mqttLogf("[LIGHTS] mode -> %s", msg + 7);
     return;
   }
 
@@ -410,9 +307,6 @@ void setup() {
     pots[i].lastChangeMs = millis();
   }
 
-  Serial1.begin(LIGHTS_BAUD, SERIAL_8N1, -1, LED_DATA_PIN);   // TX only -> Nano D2
-  lightsSelfTest();
-
   setup_wifi();
 
   // Mandatory OTA (fleet protocol): hostname = device, password = Wi-Fi
@@ -437,10 +331,6 @@ void loop() {
   mqttClient.loop();
 
   readPots();
-  if (lightsMode == LIGHTS_MODE_CYCLE) {
-    if (millis() - lastCycleStep >= CYCLE_STEP_MS) cycleStep();
-  } else if (lightsDirty) renderLights();
-  else if (millis() - lastLightsSend >= LIGHTS_RESEND_MS) sendLightsFrame();
   send_heartbeat();
   delay(10);
 }

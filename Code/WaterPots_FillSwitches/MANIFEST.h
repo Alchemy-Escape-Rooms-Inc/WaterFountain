@@ -68,7 +68,7 @@ namespace manifest {
 
 // ── Device Identity ─────────────────────────────────────────────────────────
 inline constexpr const char* DEVICE_NAME      = "WaterFountain";   // @DEVICE_NAME      (MQTT client ID + topic base)
-inline constexpr const char* FIRMWARE_VERSION = "1.4.1";           // @FIRMWARE_VERSION
+inline constexpr const char* FIRMWARE_VERSION = "1.5.0";           // @FIRMWARE_VERSION
 
 
 // ============================================================================
@@ -110,11 +110,6 @@ inline constexpr unsigned long HEARTBEAT_INTERVAL = 300000;         // @HEARTBEA
 //  @COMMAND:  STATUS        | Sends state + uptime + RSSI + per-pot detail     | Full diagnostic
 //  @COMMAND:  RESET         | Reboots ESP32                                    | Also accepts REBOOT, RESTART
 //  @COMMAND:  PUZZLE_RESET  | Re-reads all 3 fill switches, republishes state  | No reboot
-//  @COMMAND:  LIGHTS_TEST   | Strip R/G/B sweep, then back to pot colors       | v1.1.0
-//  @COMMAND:  LIGHTS_BLUE   | Whole strip solid blue (overrides pot colors)    | v1.2.0, reboot = AUTO
-//  @COMMAND:  LIGHTS_OFF    | Whole strip dark                                 | v1.2.0
-//  @COMMAND:  LIGHTS_AUTO   | Back to per-pot colors (blue empty/orange full)  | v1.2.0
-//  @COMMAND:  LIGHTS_CYCLE  | Test: constant rainbow stream, new frame 150 ms  | v1.4.0, any LIGHTS_ cmd ends it
 //
 //  STATUS MESSAGES (published on /status topic):
 //  @STATUS_MSG:  ONLINE          | Sent on boot and MQTT reconnect
@@ -140,9 +135,6 @@ inline constexpr unsigned long HEARTBEAT_INTERVAL = 300000;         // @HEARTBEA
 inline constexpr int PIN_POT1 = 4;                                  // @PIN:POT1   | Pot 1 fill switch — closes to GND when EMPTY (HIGH = filled)
 inline constexpr int PIN_POT2 = 5;                                  // @PIN:POT2   | Pot 2 fill switch — closes to GND when EMPTY (HIGH = filled)
 inline constexpr int PIN_POT3 = 6;                                  // @PIN:POT3   | Pot 3 fill switch — closes to GND when EMPTY (HIGH = filled)
-
-// -- Lights (v1.1.0, owner 2026-11-04) --
-inline constexpr int PIN_LED_DATA = 39;                             // @PIN:LED_DATA | v1.3.0: UART TX 9600 -> Arduino Nano D2 (Nano drives WS2812B on D6 at 5V). Frame F,perPot,bri,9xRGB,sum every 500ms. Sections Pot1/2/3 BLUE empty, ORANGE filled
 
 // @END:PINS
 
@@ -280,6 +272,7 @@ inline constexpr unsigned long MQTT_RECONNECT_INTERVAL = 5000;      // @TIMING:M
 //
 // @LIB:  WiFi              | ESP32 WiFi driver          | Built-in (esp32:esp32 core 3.x)
 // @LIB:  PubSubClient      | MQTT client                | v2.8+
+// @LIB:  ArduinoOTA        | Wireless updates (port 3232) | Built-in
 //
 // @END:DEPENDENCIES
 
