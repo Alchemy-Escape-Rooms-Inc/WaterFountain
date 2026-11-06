@@ -42,3 +42,8 @@ Deploy (2026-04-30):
   - Compile (esp32:esp32:esp32s3): PASS — 875400 bytes (66% flash),
     45420 bytes (13% RAM).
   - Flash to COM3: PASS — full write, hash verified, hard reset clean.
+
+=== 2026-11-05 19:15 ===
+- Owner: fountain lights dark. Wire: Pot1/2 empty, Pot3 filled, no LIGHTS_OFF ever sent, no game running.
+- Sent LIGHTS_TEST via MQTT 19:14:04 -> board replied OK (S3 alive + sending frames every 500 ms).
+- Conclusion: fault is downstream of S3 (Nano power, GPIO39->Nano D2 wire, Nano D6->strip, strip 5V). Awaiting owner eyes on strip.
